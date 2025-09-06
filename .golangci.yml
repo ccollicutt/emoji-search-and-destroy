@@ -1,0 +1,61 @@
+version: 2
+
+run:
+  timeout: 5m
+  issues-exit-code: 1
+  tests: true
+
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+  
+  govet:
+    shadow: true
+  
+  gocyclo:
+    min-complexity: 15
+  
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+  
+  misspell:
+    locale: US
+
+linters:
+  enable:
+    - errcheck        # Check for unchecked errors
+    - govet           # Vet examines Go source code
+    - ineffassign     # Detect ineffectual assignments
+    - staticcheck     # Go static analysis
+    - unused          # Check for unused constants, variables, functions
+    - misspell        # Finds commonly misspelled English words
+    - goconst         # Finds repeated strings that could be constants
+    - gocyclo         # Computes and checks cyclomatic complexities
+    - gosec           # Security checker
+    - revive          # Fast, configurable replacement for golint
+
+issues:
+  exclude-dirs:
+    - vendor
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - gosec
+    
+    # Exclude shadow checking on main functions
+    - text: "shadow"
+      linters:
+        - govet
+      path: cmd/
+  
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+severity:
+  default-severity: error

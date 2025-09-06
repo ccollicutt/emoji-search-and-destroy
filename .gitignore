@@ -1,0 +1,8 @@
+bin/*
+.tes/*
+.tesignore
+coverage.out
+gosec-report.txt
+.tes.bak/*
+logs/*
+debug/*

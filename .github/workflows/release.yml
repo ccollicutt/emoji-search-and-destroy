@@ -1,0 +1,102 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: 1.23
+    
+    - name: Get version
+      id: version
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/}
+        VERSION_NUMBER=${VERSION#v}
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "version_number=${VERSION_NUMBER}" >> $GITHUB_OUTPUT
+    
+    - name: Install analysis tools
+      run: |
+        # Install golangci-lint using official script with version from .golangci-version
+        GOLANGCI_VERSION=$(cat .golangci-version)
+        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin $GOLANGCI_VERSION
+        
+        # Install other tools
+        go install github.com/securego/gosec/v2/cmd/gosec@latest
+        go install golang.org/x/vuln/cmd/govulncheck@latest
+        go install honnef.co/go/tools/cmd/staticcheck@latest
+        go install github.com/remyoudompheng/go-misc/deadcode@latest
+        go install github.com/mibk/dupl@latest
+    
+    - name: Run comprehensive test suite
+      run: make test
+    
+    - name: Build release binaries
+      run: |
+        VERSION="${{ steps.version.outputs.version_number }}"
+        mkdir -p dist
+        
+        # Build for different platforms
+        platforms=(
+          "linux/amd64"
+          "linux/arm64" 
+          "darwin/amd64"
+          "darwin/arm64"
+          "windows/amd64"
+        )
+        
+        for platform in "${platforms[@]}"; do
+          platform_split=(${platform//\// })
+          GOOS=${platform_split[0]}
+          GOARCH=${platform_split[1]}
+          
+          output_name=emoji-sad-${GOOS}-${GOARCH}
+          if [ $GOOS = "windows" ]; then
+            output_name+='.exe'
+          fi
+          
+          echo "Building $output_name..."
+          env GOOS=$GOOS GOARCH=$GOARCH go build \
+            -ldflags "-s -w -X emoji-search-and-destroy/internal/version.Version=${VERSION}" \
+            -o dist/$output_name \
+            ./cmd/emoji-sad
+          
+          # Create compressed archives
+          cd dist
+          if [ $GOOS = "windows" ]; then
+            zip ${output_name%.exe}.zip $output_name
+            rm $output_name
+          else
+            tar -czf ${output_name}.tar.gz $output_name
+            rm $output_name
+          fi
+          cd ..
+        done
+    
+    - name: Generate checksums
+      run: |
+        cd dist
+        sha256sum * > checksums.txt
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.version }}
+        name: ${{ steps.version.outputs.version }}
+        files: dist/*
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
